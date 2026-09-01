@@ -39,9 +39,9 @@ def setup_logging(logpath):
     )
 
 # TODO: Currently we only have the values for postEE!!!!
-def get_region_mask(region, column_file, do_vbf_pairing, jet_coll="Jet", n_higgs_jets=4):
+def get_region_mask(region, column_file, do_vbf_pairing, jet_coll_higgs="Jet", jet_coll_vbf=None, n_higgs_jets=4):
     if region == "inclusive":
-        return ak.ones_like(column_file["INPUTS"][jet_coll]["MASK"][:, 0])
+        return ak.ones_like(column_file["INPUTS"][jet_coll_higgs]["MASK"][:, 0])
 
     if "test" in region:
         # keep only the first N events
@@ -49,13 +49,13 @@ def get_region_mask(region, column_file, do_vbf_pairing, jet_coll="Jet", n_higgs
         logger.info(f"Keeping only the first {num_events} events!")
         mask = ak.concatenate(
             (
-                ak.ones_like(column_file["INPUTS"][jet_coll]["MASK"][:, 0])[:num_events],
-                ak.zeros_like(column_file["INPUTS"][jet_coll]["MASK"][:, 0])[num_events:],
+                ak.ones_like(column_file["INPUTS"][jet_coll_higgs]["MASK"][:, 0])[:num_events],
+                ak.zeros_like(column_file["INPUTS"][jet_coll_higgs]["MASK"][:, 0])[num_events:],
             ),
         )
         return mask
 
-    jet_btag = column_file["INPUTS"][jet_coll]["btagPNetB"]
+    jet_btag = column_file["INPUTS"][jet_coll_higgs]["btagPNetB"]
     if region == "4b" or region == "4M":
         mask = (
             (jet_btag[:, 0] > 0.2605)
@@ -93,11 +93,11 @@ def get_region_mask(region, column_file, do_vbf_pairing, jet_coll="Jet", n_higgs
             & (jet_btag[:, 3] < 0.2605)
         )
     elif region == "vbf_presel" and do_vbf_pairing:
-        mask = get_mask_vbf_region(column_file, 400, 3.5, jet_coll=jet_coll, n_higgs_jets=n_higgs_jets)
+        mask = get_mask_vbf_region(column_file, 400, 3.5, jet_coll=jet_coll_vbf if jet_coll_vbf else jet_coll_higgs, n_higgs_jets=n_higgs_jets)
     elif region == "vbf_no_kin_cuts" and do_vbf_pairing:
-        mask = get_mask_vbf_region(column_file, 0, 0, jet_coll=jet_coll, n_higgs_jets=n_higgs_jets)
+        mask = get_mask_vbf_region(column_file, 0, 0, jet_coll=jet_coll_vbf if jet_coll_vbf else jet_coll_higgs, n_higgs_jets=n_higgs_jets)
     else:
-        raise ValueError("Undefined region")
+        raise ValueError(f"Undefined region {region}!")
     return mask
 
 

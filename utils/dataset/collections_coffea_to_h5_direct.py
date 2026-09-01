@@ -114,31 +114,31 @@ jet_collections_dict = {
         },
     ],
     "JET_COLLECTIONS_VBF_PAIRING_AFTER_HIGGS_PAIRING_TOTAL": [
-        {
-            "JetGoodVBFMergedProvVBFPadded": {
-                "saved_name": "Jet",
-                "max_num_jets": 5,
-                "resonances": ["vbf"],
-                "min_num_jets": 0,
-                "prov_key": "provenance_vbf",
-            },
-        },
-        {
-            "JetGoodVBFMergedProvVBFPadded": {
-                "saved_name": "JetVBF",
-                "max_num_jets": 5,
-                "resonances": ["vbf"],
-                "min_num_jets": 0,
-                "prov_key": "provenance_vbf",
-            },
-            "JetGoodProvHiggsPadded": {
-                "saved_name": "JetHiggs",
-                "max_num_jets": 4,
-                "resonances": [],
-                "min_num_jets": 4,
-                "prov_key": "provenance_higgs",
-            },
-        },
+        # {
+        #     "JetGoodVBFMergedProvVBFPadded": {
+        #         "saved_name": "Jet",
+        #         "max_num_jets": 5,
+        #         "resonances": ["vbf"],
+        #         "min_num_jets": 0,
+        #         "prov_key": "provenance_vbf",
+        #     },
+        # },
+        # {
+        #     "JetGoodVBFMergedProvVBFPadded": {
+        #         "saved_name": "JetVBF",
+        #         "max_num_jets": 5,
+        #         "resonances": ["vbf"],
+        #         "min_num_jets": 0,
+        #         "prov_key": "provenance_vbf",
+        #     },
+        #     "JetGoodProvHiggsPadded": {
+        #         "saved_name": "JetHiggs",
+        #         "max_num_jets": 4,
+        #         "resonances": [],
+        #         "min_num_jets": 4,
+        #         "prov_key": "provenance_higgs",
+        #     },
+        # },
         {
             "JetTotalSPANetPadded": {
                 "saved_name": "Jet",
@@ -208,6 +208,65 @@ global_collections_dict = {
             },
         },
     ],
+    "GLOBAL_COLLECTIONS_SEPARATE_HIGGS_VBF": [
+        {
+            "events_mjjJetGoodVBFMergedProvVBFPtFlattenPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "mjjVBF",
+            },
+            "events_detaJetGoodVBFMergedProvVBFPtFlattenPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "detaVBF",
+            },
+            "events_centralityHiggsLeadingJetGoodVBFMergedProvVBFPtFlattenPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "centralityHiggsLeadingVBF",
+            },
+            "events_centralityHiggsSubLeadingJetGoodVBFMergedProvVBFPtFlattenPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "centralityHiggsSubLeadingVBF",
+            },
+            "__save_all_remaining__": True,
+        },
+        {
+            "events_mjjJetGoodVBFMergedProvVBFPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "mjjVBF",
+            },
+            "events_detaJetGoodVBFMergedProvVBFPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "detaVBF",
+            },
+            "events_centralityHiggsLeadingJetGoodVBFMergedProvVBFPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "centralityHiggsLeadingVBF",
+            },
+            "events_centralityHiggsSubLeadingJetGoodVBFMergedProvVBFPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "centralityHiggsSubLeadingVBF",
+            },
+            "__save_all_remaining__": True,
+        },
+        {
+            "events_mjjJetGoodVBFMergedProvVBFPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "mjjVBF",
+            },
+            "events_detaJetGoodVBFMergedProvVBFPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "detaVBF",
+            },
+            "events_centralityHiggsLeadingJetGoodVBFMergedProvVBFPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "centralityHiggsLeadingVBF",
+            },
+            "events_centralityHiggsSubLeadingJetGoodVBFMergedProvVBFPadded": {
+                "saved_name_coll": "Event",
+                "saved_name_var": "centralityHiggsSubLeadingVBF",
+            },
+            "__save_all_remaining__": True,
+        },
+    ],
     "GLOBAL_COLLECTIONS_VBF_MERGED_COLL": [
         {
             "events_mjjJetGoodVBFMergedProvVBFPtFlattenPadded": {
@@ -264,4 +323,5 @@ global_collections_dict = {
             },
         },
     ],
+    
 }

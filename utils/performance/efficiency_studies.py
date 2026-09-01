@@ -197,25 +197,28 @@ def main():
         true_entry = true_dict[file_dict["true"]]
         n_higgs_jets = true_entry.get("n_higgs_jets", 4)
         n_higgs_jets_pred = file_dict.get("n_higgs_jets", n_higgs_jets)
-        jet_coll = true_entry.get("jet_coll_higgs", "Jet")
-        jet_coll_pred = file_dict.get("jet_coll_higgs", jet_coll)
-        offset_jet_idx = file_dict.get(
+        jet_coll_higgs = true_entry.get("jet_coll_higgs", "Jet")
+        jet_coll_vbf = true_entry.get("jet_coll_vbf", None)
+        offset_jet_idx_higgs = file_dict.get(
             "offset_jet_idx_higgs", file_dict.get("offset_jet_idx", 0)
         )
+        offset_jet_idx_vbf = file_dict.get("offset_jet_idx_vbf", 0)
 
         # define region mask
         mask_region_spanet = helpers.get_region_mask(
             args.region,
             spanetfile,
             do_vbf_pairing,
-            jet_coll=jet_coll_pred,
+            jet_coll_higgs=jet_coll_higgs,
+            jet_coll_vbf=jet_coll_vbf,
             n_higgs_jets=n_higgs_jets_pred,
         )
         mask_region_true = helpers.get_region_mask(
             args.region,
             truefile,
             do_vbf_pairing,
-            jet_coll=jet_coll,
+            jet_coll_higgs=jet_coll_higgs,
+            jet_coll_vbf=jet_coll_vbf,
             n_higgs_jets=n_higgs_jets,
         )
         assert all(mask_region_spanet == mask_region_true)
@@ -225,7 +228,7 @@ def main():
         # the prediction file might have the predicted class
         # and not the original one
         mask_class_true = helpers.get_class_mask(
-            args.class_label, truefile, jet_coll=jet_coll
+            args.class_label, truefile, jet_coll=jet_coll_higgs
         )
 
         if args.num_events:
@@ -233,19 +236,27 @@ def main():
                 f"test_{args.num_events}",
                 truefile,
                 False,
-                jet_coll=jet_coll,
+                jet_coll_higgs=jet_coll_higgs,
+                jet_coll_vbf=jet_coll_vbf,
                 n_higgs_jets=n_higgs_jets,
             )
             logger.info(f"max num events {ak.sum(mask_num_events)}")
         else:
-            mask_num_events = ak.ones_like(truefile["INPUTS"][jet_coll]["MASK"][:, 0])
+            mask_num_events = ak.ones_like(truefile["INPUTS"][jet_coll_higgs]["MASK"][:, 0])
 
         mask_spanet = mask_region_spanet & mask_class_true & mask_num_events
         mask_true = mask_region_true & mask_class_true & mask_num_events
 
         logger.info(f"Number of events after the masks : {ak.sum(mask_true)}")
 
-        jet = helpers.get_jet_4vec(truefile, mask_true, jet_coll=jet_coll)
+        if jet_coll_vbf is not None:
+            jet_higgs = helpers.get_jet_4vec(truefile, mask_true, jet_coll=jet_coll_higgs)
+            jet_vbf = helpers.get_jet_4vec(truefile, mask_true, jet_coll=jet_coll_vbf)
+            n_higgs_slots = truefile["INPUTS"][jet_coll_higgs]["MASK"].shape[1]
+            jet_vbf = ak.with_field(jet_vbf, jet_vbf.index + n_higgs_slots, "index")
+            jet = ak.concatenate([jet_higgs, jet_vbf], axis=1)
+        else:
+            jet = helpers.get_jet_4vec(truefile, mask_true, jet_coll=jet_coll_higgs)
 
         resonances = file_dict.get("resonances")
         idx_true = load_jets_and_pairing(
@@ -337,7 +348,8 @@ def main():
                 "fully matched",
                 higgs=not args.ignore_higgs,
                 vbf=do_vbf_pairing,
-                offset_jet_idx=offset_jet_idx,
+                offset_jet_idx_higgs=offset_jet_idx_higgs,
+                offset_jet_idx_vbf=offset_jet_idx_vbf,
             )
 
             # Omitting calculation of partially matched for now
@@ -469,14 +481,16 @@ def main():
 
     run2_true_entry = true_dict[run2_dataset]
     n_higgs_jets = run2_true_entry.get("n_higgs_jets", 4)
-    jet_coll = run2_true_entry.get("jet_coll_higgs", "Jet")
+    jet_coll_higgs = run2_true_entry.get("jet_coll_higgs", "Jet")
+    jet_coll_vbf = run2_true_entry.get("jet_coll_vbf", None)
 
     # define region mask
     mask_region_true = helpers.get_region_mask(
         args.region,
         truefile,
         do_vbf_pairing,
-        jet_coll=jet_coll,
+        jet_coll_higgs=jet_coll_higgs,
+        jet_coll_vbf=jet_coll_vbf,
         n_higgs_jets=n_higgs_jets,
     )
     # assert all(mask_region_spanet == mask_region_true)
@@ -486,15 +500,22 @@ def main():
     # the prediction file might have the predicted class
     # and not the original one
     mask_class_true = helpers.get_class_mask(
-        args.class_label, truefile, jet_coll=jet_coll
+        args.class_label, truefile, jet_coll=jet_coll_higgs
     )
     mask_true = mask_region_true & mask_class_true
 
-    jet_for_idx = [
-        helpers.get_jet_4vec(truefile, ak.ones_like(mask_true), jet_coll=jet_coll)
-    ]
-
-    jet_vbf_for_idx = [j[:, n_higgs_jets:] for j in jet_for_idx]
+    if jet_coll_vbf is not None:
+        jet_higgs_for_idx = helpers.get_jet_4vec(truefile, ak.ones_like(mask_true), jet_coll=jet_coll_higgs)
+        jet_vbf_only_for_idx = helpers.get_jet_4vec(truefile, ak.ones_like(mask_true), jet_coll=jet_coll_vbf)
+        n_higgs_slots = truefile["INPUTS"][jet_coll_higgs]["MASK"].shape[1]
+        jet_vbf_global = ak.with_field(jet_vbf_only_for_idx, jet_vbf_only_for_idx.index + n_higgs_slots, "index")
+        jet_for_idx = [ak.concatenate([jet_higgs_for_idx, jet_vbf_global], axis=1)]
+        jet_vbf_for_idx = [jet_vbf_only_for_idx]
+    else:
+        jet_for_idx = [
+            helpers.get_jet_4vec(truefile, ak.ones_like(mask_true), jet_coll=jet_coll_higgs)
+        ]
+        jet_vbf_for_idx = [j[:, n_higgs_jets:] for j in jet_for_idx]
 
     if do_vbf_pairing:
         # get the idx of the 2 leading mjj jets (excluding the 4 jets leading in btag from higgs)
@@ -695,7 +716,7 @@ def main():
                 [model["kl_values"] for model in df_collection.values()]
                 + [r2_model["kl_values"]],
                 [model["file_dict"]["label"] for model in df_collection.values()]
-                + [r"$D_{HH}$-method"],
+                + [r"Leading $m_{jj}$" if (args.vbf and args.ignore_higgs) else r"$D_{HH}$-method + Leading $m_{jj}$" if args.vbf else r"$D_{HH}$-method"],
                 [model["file_dict"]["color"] for model in df_collection.values()]
                 + ["yellowgreen"],
                 "eff_fully_matched_allklambda",
@@ -720,7 +741,7 @@ def main():
                 [model["kl_values"] for model in df_collection.values()]
                 + [r2_model["kl_values"]],
                 [model["file_dict"]["label"] for model in df_collection.values()]
-                + [r"$D_{HH}$-method"],
+                + [r"Leading $m_{jj}$" if (args.vbf and args.ignore_higgs) else r"$D_{HH}$-method + Leading $m_{jj}$" if args.vbf else r"$D_{HH}$-method"],
                 [model["file_dict"]["color"] for model in df_collection.values()]
                 + ["yellowgreen"],
                 "tot_eff_fully_matched_allklambda",
@@ -740,7 +761,7 @@ def main():
                 [model["unc_diff_eff_spanet"][0] for model in df_collection.values()]
                 + [r2_model["unc_diff_eff_run2"][0]],
                 [model["file_dict"]["label"] for model in df_collection.values()]
-                + [r"$D_{HH}$-method"],
+                + [r"Leading $m_{jj}$" if (args.vbf and args.ignore_higgs) else r"$D_{HH}$-method + Leading $m_{jj}$" if args.vbf else r"$D_{HH}$-method"],
                 [model["file_dict"]["color"] for model in df_collection.values()]
                 + ["yellowgreen"],
                 plot_dir,
@@ -758,7 +779,7 @@ def main():
                 ]
                 + [r2_model["total_unc_diff_eff_run2"][0]],
                 [model["file_dict"]["label"] for model in df_collection.values()]
-                + [r"$D_{HH}$-method"],
+                + [r"Leading $m_{jj}$" if (args.vbf and args.ignore_higgs) else r"$D_{HH}$-method + Leading $m_{jj}$" if args.vbf else r"$D_{HH}$-method"],
                 [model["file_dict"]["color"] for model in df_collection.values()]
                 + ["yellowgreen"],
                 plot_dir,

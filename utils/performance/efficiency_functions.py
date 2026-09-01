@@ -137,7 +137,8 @@ def calculate_efficiencies(
     label,
     higgs=True,
     vbf=False,
-    offset_jet_idx=0,
+    offset_jet_idx_higgs=0,
+    offset_jet_idx_vbf=0,
 ):
     matching_eval_model = [ak.ones_like(true[:, 0, 0]) for true in true_idx]
 
@@ -145,12 +146,12 @@ def calculate_efficiencies(
         # higgs 1 and higgs 2
         matching_eval_model_higgs = [
             (
-                ak.all(true[:, 0] == prediction[:, 0] + offset_jet_idx, axis=1)
-                | ak.all(true[:, 0] == prediction[:, 1] + offset_jet_idx, axis=1)
+                ak.all(true[:, 0] == prediction[:, 0] + offset_jet_idx_higgs, axis=1)
+                | ak.all(true[:, 0] == prediction[:, 1] + offset_jet_idx_higgs, axis=1)
             )
             & (
-                ak.all(true[:, 1] == prediction[:, 0] + offset_jet_idx, axis=1)
-                | ak.all(true[:, 1] == prediction[:, 1] + offset_jet_idx, axis=1)
+                ak.all(true[:, 1] == prediction[:, 0] + offset_jet_idx_higgs, axis=1)
+                | ak.all(true[:, 1] == prediction[:, 1] + offset_jet_idx_higgs, axis=1)
             )
             for true, prediction in zip(true_idx, prediction_idx)
         ]
@@ -170,9 +171,9 @@ def calculate_efficiencies(
         # vbf
         matching_eval_model_vbf = [
             (
-                ak.all(true[:, idx_vbf] == prediction[:, idx_vbf] + offset_jet_idx, axis=1)
+                ak.all(true[:, idx_vbf] == prediction[:, idx_vbf] + offset_jet_idx_vbf, axis=1)
                 # check also if the idx are swapped (altought this shouldn't happen)
-                | ak.all(true[:, idx_vbf, ::-1] == prediction[:, idx_vbf] + offset_jet_idx, axis=1)
+                | ak.all(true[:, idx_vbf, ::-1] == prediction[:, idx_vbf] + offset_jet_idx_vbf, axis=1)
             )
             for true, prediction in zip(true_idx, prediction_idx)
         ]
@@ -298,16 +299,6 @@ def best_reco_higgs(jet_collection, idx_collection, higgs=True):
         ak.fill_none(copy.copy(idx_collection), -1), dtype=np.int64
     )
     if len(jet_collection) > 0:
-        n_jets = int(ak.num(jet_collection, axis=1)[0])
-        oob = idx_collection_noNone >= n_jets
-        if np.any(oob):
-            import warnings
-            warnings.warn(
-                f"best_reco_higgs: {np.sum(oob)} indices >= n_jets={n_jets} "
-                "(prediction file may use global indices). Clipping to 0."
-            )
-            idx_collection_noNone = np.where(oob, 0, idx_collection_noNone)
-            # breakpoint()
         if higgs:
             higgs_1 = ak.unflatten(
                 jet_collection[

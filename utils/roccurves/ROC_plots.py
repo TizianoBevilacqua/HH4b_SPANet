@@ -161,10 +161,11 @@ def my_roc_auc(
     )
 
 
-def roc_curve_compare_weights(class_dict, roc_values_dict, plot_dir, fpr_cutoff, no_weights, kl, roc_info_dict):
+def roc_curve_compare_weights(class_dict, roc_values_dict, plot_dir, fpr_cutoff, no_weights, kl, roc_info_dict, kl_bkg="all"):
     """Plot precision/recall curve from a dictionary fed into this function."""
     kl_string = kl if type(kl) == str else f"{kl:.2f}"
     kl_tag = kl_string.replace("-", "m").replace(".", "p")
+    kl_bkg_string = kl_bkg if type(kl_bkg) == str else f"{kl_bkg:.2f}"
     logger.info(f"Plotting roc curves for kl = {kl_string} ...")
 
     assert 1e-6 < fpr_cutoff < 1e-1
@@ -246,14 +247,17 @@ def roc_curve_compare_weights(class_dict, roc_values_dict, plot_dir, fpr_cutoff,
                         cmstext="Private"
                     )
                     .add_annotation(0.03, 0.97, f"Region: {args.region}", ha="left", va="top", fontsize=14)
+                    .add_annotation(0.03, 0.91, rf"sig $\kappa_\lambda$ = {kl_string}", ha="left", va="top", fontsize=14)
+                    .add_annotation(0.03, 0.85, rf"bkg $\kappa_\lambda$ = {kl_bkg_string}", ha="left", va="top", fontsize=14)
                     .run()
                 )
 
 
-def precision_recall_curve_function(class_dict, plot_dir, no_weights, kl):
+def precision_recall_curve_function(class_dict, plot_dir, no_weights, kl, kl_bkg="all"):
     """Plot precision/recall curve from a dictionary fed into this function."""
     kl_string = kl if type(kl) == str else f"{kl:.2f}"
     kl_tag = kl_string.replace("-", "m").replace(".", "p")
+    kl_bkg_string = kl_bkg if type(kl_bkg) == str else f"{kl_bkg:.2f}"
     logger.info(f"Plotting precision-recall curves for kl = {kl_string} ...")
 
     series = {}
@@ -311,14 +315,17 @@ def precision_recall_curve_function(class_dict, plot_dir, no_weights, kl):
                     cmstext="Private"
                 )
                 .add_annotation(0.03, 0.97, f"Region: {args.region}", ha="left", va="top", fontsize=14)
+                .add_annotation(0.03, 0.91, rf"sig $\kappa_\lambda$ = {kl_string}", ha="left", va="top", fontsize=14)
+                .add_annotation(0.03, 0.85, rf"bkg $\kappa_\lambda$ = {kl_bkg_string}", ha="left", va="top", fontsize=14)
                 .run()
             )
 
 
-def signal_background_hist(class_dict, plot_dir, no_weights, kl):
+def signal_background_hist(class_dict, plot_dir, no_weights, kl, kl_bkg="all"):
     """Plot background/signal histogram from a dictionary fed into this function."""
     kl_string = kl if type(kl) == str else f"{kl:.2f}"
     kl_tag = kl_string.replace("-", "m").replace(".", "p")
+    kl_bkg_string = kl_bkg if type(kl_bkg) == str else f"{kl_bkg:.2f}"
     logger.info(f"Plotting score histogram for kl = {kl_string}...")
 
     series_all_models = {}
@@ -417,6 +424,8 @@ def signal_background_hist(class_dict, plot_dir, no_weights, kl):
                 # if args.plot_quantile:
                 histplot.add_line(orientation="v", x=cut, color="black", linestyle="dotted")  # 0 and 1 should not have a particular effect. its just to have two points on the line
                 histplot.add_annotation(0.03, 0.97, f"Region: {args.region}", ha="left", va="top", fontsize=14)
+                histplot.add_annotation(0.03, 0.91, rf"sig $\kappa_\lambda$ = {kl_string}", ha="left", va="top", fontsize=14)
+                histplot.add_annotation(0.03, 0.85, rf"bkg $\kappa_\lambda$ = {kl_bkg_string}", ha="left", va="top", fontsize=14)
                 histplot.run()
 
     if len(series_all_models) > 2:  # to avoid plotting the combined plot with all the models if there's only one model
@@ -443,6 +452,8 @@ def signal_background_hist(class_dict, plot_dir, no_weights, kl):
                     cmstext="Private"
                 )
                 .add_annotation(0.03, 0.97, f"Region: {args.region}", ha="left", va="top", fontsize=14)
+                .add_annotation(0.03, 0.91, rf"sig $\kappa_\lambda$ = {kl_string}", ha="left", va="top", fontsize=14)
+                .add_annotation(0.03, 0.85, rf"bkg $\kappa_\lambda$ = {kl_bkg_string}", ha="left", va="top", fontsize=14)
                 .run()
             )
 
@@ -460,13 +471,14 @@ def main():
         truefile = h5py.File(true_dict[model_dict["true"]]["name"], "r")
 
         true_dict_entry = true_dict[model_dict["true"]]
-        jet_coll = true_dict_entry.get("jet_coll", "Jet")
+        jet_coll_higgs = true_dict_entry.get("jet_coll_higgs", "Jet")
+        jet_coll_vbf = true_dict_entry.get("jet_coll_vbf", None)
         n_higgs_jets = true_dict_entry.get("n_higgs_jets", 4)
 
         model_dict.pop("file")
         model_dict.pop("true")
 
-        mask_region_spanet = helpers.get_region_mask(args.region, spanetfile, True, jet_coll, n_higgs_jets=n_higgs_jets)
+        mask_region_spanet = helpers.get_region_mask(args.region, spanetfile, True, jet_coll_higgs=jet_coll_higgs, jet_coll_vbf=jet_coll_vbf, n_higgs_jets=n_higgs_jets)
 
         spanet_class = spanetfile["CLASSIFICATIONS"]["EVENT"]["class"][:, 1][()][mask_region_spanet]
         true_class = truefile["CLASSIFICATIONS"]["EVENT"]["class"][()][mask_region_spanet]
@@ -553,10 +565,10 @@ def main():
                 }
 
             roc_curve_compare_weights(
-                class_dict_kl, roc_values_dict, plot_dir_bkg, args.fpr_cutoff, args.no_weights, kl, roc_info_dict
+                class_dict_kl, roc_values_dict, plot_dir_bkg, args.fpr_cutoff, args.no_weights, kl, roc_info_dict, kl_bkg=kl_bkg
             )
-            precision_recall_curve_function(class_dict_kl, plot_dir_bkg, args.no_weights, kl)
-            signal_background_hist(class_dict_kl, plot_dir_bkg, args.no_weights, kl)
+            precision_recall_curve_function(class_dict_kl, plot_dir_bkg, args.no_weights, kl, kl_bkg=kl_bkg)
+            signal_background_hist(class_dict_kl, plot_dir_bkg, args.no_weights, kl, kl_bkg=kl_bkg)
 
         # save the fpr and tpr in a npz file
         os.makedirs(f"{plot_dir_bkg}/roc_curves", exist_ok=True)

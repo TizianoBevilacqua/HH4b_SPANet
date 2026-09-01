@@ -65,11 +65,16 @@ from collections_coffea_to_h5_direct import (
     jet_collections_dict,
     global_collections_dict,
 )
+from weights_handling_coffea_to_h5_direct import (
+    compute_weight_norm_map,
+    process_weights,
+)
 
 COFFEA_PADDING_VALUE = -999.0
 H5_PADDING_VALUE = 9999.0
 SEED = 9999
 _permutations = {}
+_pt_flatten_mixing_warned = False
 
 DEFAULT_RESONANCES = {
     "h1": (1, ("b1", "b2")),
@@ -150,10 +155,62 @@ p.add_argument(
     help="Normalize weights divided by sum_genweights",
 )
 p.add_argument(
+    "-bw",
+    "--balance-weights",
+    choices=["none", "class", "sample"],
+    default="none",
+    help="Instead of normalizing weights by sum_genweights, rescale by a target computed "
+        "from sum(|weight|) after high-weight filtering (if enabled). "
+        "'class': every class ends up with the same total sum(|weight|)=1, aggregated over "
+        "all samples/datasets in that class (matches the old --balance-class-weights). "
+        "'sample': every individual dataset/sample is balanced on its own; see "
+        "--balance-sample-scope for how classes are treated. "
+        "Mutually exclusive with --norm-weights.",
+)
+p.add_argument(
+    "--balance-sample-scope",
+    choices=["global", "within-class", "custom"],
+    default="global",
+    help="Only used when --balance-weights=sample. "
+        "'global': every sample is normalized independently to sum(|weight|)=1, regardless "
+        "of class; classes with more samples end up with a larger total. "
+        "'within-class': samples are still individually balanced to each other, but each "
+        "class's aggregate total is additionally forced to be equal across classes "
+        "(sum(|weight|)=1 per class, split evenly among its samples).",
+)
+p.add_argument(
     "-rw",
     "--remove-high-weights",
     action="store_true",
-    help="Remove events with weights above 100 (only applies to regions containing 'postW' in name)",
+    help="Remove events with very high weights (only applies to regions containing 'post' in name). "
+        "Threshold is set dynamically (N x median of |w|) unless --weight-threshold is given.",
+)
+p.add_argument(
+    "-acwf",
+    "--all-cat-weight-filter",
+    action="store_true",
+    help="Remove events with very high weights (from all categories). "
+        "Threshold is set dynamically (N x median of |w|) unless --weight-threshold is given.",
+)
+p.add_argument(
+    "--weight-threshold",
+    type=float,
+    default=None,
+    help="Fixed absolute threshold for high-weight removal. If not set, a dynamic threshold is used.",
+)
+p.add_argument(
+    "--weight-threshold-factor",
+    type=float,
+    default=10.0,
+    help="Multiplicative factor on median(|w|) used as dynamic threshold (default: 10). "
+        "Ignored if --weight-threshold is set.",
+)
+p.add_argument(
+    "-nwt",
+    "--neg-weight-treatment",
+    choices=["none", "zero", "abs"],
+    default="none",
+    help="treatment for negative weights options: ['none', 'zero', 'abs'], default = none.",
 )
 p.add_argument(
     "--novars",
@@ -170,6 +227,9 @@ p.add_argument(
 
 
 args = p.parse_args()
+
+if args.norm_weights and args.balance_weights != "none":
+    p.error("--norm-weights and --balance-weights are mutually exclusive.")
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -491,6 +551,19 @@ def coffea_to_h5(
         print("Empty columns, trying to read from parquet files from:", rootdir)
         cols = load_cols_parquet(rootdir)
 
+    weight_norm_map = None
+    if args.balance_weights != "none":
+        weight_norm_map, class_abs_sum, n_samples_per_class = compute_weight_norm_map(
+            cols, regions, class_labels, weight_name, args.balance_weights, args.balance_sample_scope, args.neg_weight_treatment, args, dataset_to_class_index
+        )
+        print()
+        print("-" * 80)
+        print(f"Balancing weights (mode={args.balance_weights}, sample_scope={args.balance_sample_scope})")
+        print("sum(|weight|) per class (post-filtering, before balancing):")
+        for idx, total in sorted(class_abs_sum.items()):
+            label = class_labels[idx] if idx < len(class_labels) else str(idx)
+            print(f"  class {idx} ({label}): sum(|weight|) = {total:.6f}, n_samples = {n_samples_per_class[idx]}")
+
     path_base = os.path.splitext(h5_path)[0]
     out_dir_name = os.path.dirname(h5_path)
     if out_dir_name:
@@ -576,20 +649,10 @@ def coffea_to_h5(
                     w = payload[weight_name]
                     N = len(w)
 
-                    if args.remove_high_weights and "post" in region:
-                        weight_mask = payload[weight_name] < 100
-                        print(f"Maximal weight: {np.max(w[weight_mask])}")
-                        print(f"Maximal weight without cutting: {np.max(w)}")
+                    w, weight_mask, apply_weight_filter = process_weights(
+                        w, region, payload, sum_genweights, dataset, weight_norm_map, skey, class_idx, args
+                    )
 
-                    if args.norm_weights:
-                        print(
-                            f"weights before norm = {np.mean(w):.3f}, {np.std(w):.3f}"
-                        )
-                        w = w / sum_genweights[dataset]
-                        print(
-                            f"Dividing by sum_genweights = {sum_genweights[dataset]:.3f}",
-                            f"weights after norm = {np.mean(w):.8f}, {np.std(w):.8f}",
-                        )
                     if class_idx == 0 and args.downscale_training:
                         train_frac_sample = train_frac*33398/1629245
                     else:
@@ -600,9 +663,13 @@ def coffea_to_h5(
                         else np.arange(N) < int(N * train_frac_sample)
                     )
                     test_mask = ~train_mask
-                    if args.remove_high_weights and "post" in region:
+                    if apply_weight_filter:
                         train_mask = train_mask & weight_mask
                         test_mask = test_mask & weight_mask
+
+                    print()
+                    print("-"*80)
+                    print(f"DEBUG: checking excluded weights: {list(w[~train_mask & ~test_mask][:20])}")
 
                     write_block_split(
                         tr_w,
@@ -735,28 +802,44 @@ def coffea_to_h5(
                                     len(global_variables) == 1
                                     and global_variables[0].isupper()
                                     and global_variables[0] in global_collections_dict
-                                    and name
-                                    in global_collections_dict[global_variables[0]][j]
+                                    and (
+                                        (
+                                            name in global_collections_dict[global_variables[0]][j]
+                                            and isinstance(global_collections_dict[global_variables[0]][j][name], dict)
+                                        )
+                                        or (
+                                            global_collections_dict[global_variables[0]][j].get(
+                                                "__save_all_remaining__", False
+                                            )
+                                            and f"{coll}_N" not in payload_columns
+                                        )
+                                    )
                                 )
                                 and jet_i == 0
                                 and type(arr_u[0]) is not np.ndarray
                             ):
+                                coll_dict = global_collections_dict[global_variables[0]][j]
                                 if (
-                                    "PtFlatten" in jet_coll and "PtFlatten" not in name
-                                ) or (
-                                    "PtFlatten" not in jet_coll and "PtFlatten" in name
+                                    name in coll_dict
+                                    and isinstance(coll_dict[name], dict)
                                 ):
-                                    print(
-                                        f"WARNING: Mixing pt-flatten and non-pt-flatten collections! \nMaybe need to change the global variable configuration, maybe you just need to reorder the global variables."
-                                    )
-
-                                is_global = True
-                                glob_coll = global_collections_dict[
-                                    global_variables[0]
-                                ][j][name]["saved_name_coll"]
-                                glob_var = global_collections_dict[global_variables[0]][
-                                    j
-                                ][name]["saved_name_var"]
+                                    if (
+                                        "PtFlatten" in jet_coll and "PtFlatten" not in name
+                                    ) or (
+                                        "PtFlatten" not in jet_coll and "PtFlatten" in name
+                                    ):
+                                        global _pt_flatten_mixing_warned
+                                        _pt_flatten_mixing_warned = True
+                                        print(
+                                            f"WARNING: Mixing pt-flatten and non-pt-flatten collections! \nMaybe need to change the global variable configuration, maybe you just need to reorder the global variables."
+                                        )
+                                    is_global = True
+                                    glob_coll = coll_dict[name]["saved_name_coll"]
+                                    glob_var = coll_dict[name]["saved_name_var"]
+                                else:
+                                    is_global = True
+                                    glob_coll = coll
+                                    glob_var = var
                             else:
                                 is_global = False
                                 glob_coll = None
@@ -884,3 +967,10 @@ if __name__ == "__main__":
         train_frac=args.train_frac,
         do_data_shuffling=not args.no_shuffle,
     )
+
+    if _pt_flatten_mixing_warned:
+        print("\n" + "!" * 80)
+        print("!!! WARNING: Mixing pt-flatten and non-pt-flatten collections detected !!!")
+        print("!!! Maybe need to change the global variable configuration,            !!!")
+        print("!!! maybe you just need to reorder the global variables.               !!!")
+        print("!" * 80 + "\n")
