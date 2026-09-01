@@ -13,6 +13,53 @@ import pyarrow.dataset as ds
 import pathlib
 from collections import defaultdict
 
+# Add at the top of coffea_to_h5_direct.py or run before it
+import coffea.processor
+import types
+import sys
+
+# Create a fake accumulator module pointing to the new location
+accumulator_mod = types.ModuleType("coffea.processor.accumulator")
+
+# Try to pull existing classes from the new location
+try:
+    from coffea.processor import accumulator as _acc
+    accumulator_mod.__dict__.update(_acc.__dict__)
+except ImportError:
+    pass
+
+# Define missing classes that were in old coffea
+class column_accumulator:
+    def __init__(self, value):
+        self.value = value
+    def __add__(self, other):
+        import numpy as np
+        return column_accumulator(np.concatenate([self.value, other.value]))
+    def __iadd__(self, other):
+        return self.__add__(other)
+
+class dict_accumulator(dict):
+    def add(self, other):
+        for k, v in other.items():
+            if k in self:
+                self[k] += v
+            else:
+                self[k] = v
+
+class value_accumulator:
+    def __init__(self, dtype, default=None):
+        self.value = default
+
+accumulator_mod.column_accumulator = column_accumulator
+accumulator_mod.dict_accumulator = dict_accumulator
+accumulator_mod.value_accumulator = value_accumulator
+
+sys.modules["coffea.processor.accumulator"] = accumulator_mod
+# Also patch the processor namespace directly
+coffea.processor.column_accumulator = column_accumulator
+coffea.processor.dict_accumulator = dict_accumulator
+coffea.processor.value_accumulator = value_accumulator
+
 from collections_coffea_to_h5_direct import (
     KEEP_TOGETHER_COLLECTIONS,
     jet_collections_dict,

@@ -29,7 +29,7 @@
 
     "skip_connections": true,
     "initial_embedding_skip_connections": true,    
-    "event_info_file": "/afs/cern.ch/user/t/tharte/public/Software/HH4b_SPANet/event_files/HH4b/hh4b_5jet_btagWP.yaml",
+    "event_info_file": "/afs/cern.ch/user/t/tbevilac/postdoc/HH4b_SPANet/event_files/HH4b/hh4b_5jet_btagWP.yaml",
     "training_file": "/eos/user/t/tharte/Analysis_data/spanet_samples/1_13_2_loose_MC_postEE_pt_vary_btagWP_newLeptonVeto_3L1Cut_UpdateJetVetoMap/output_JetGood_train.h5",
 
     "normalize_features": true,

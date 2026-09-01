@@ -30,8 +30,8 @@ EVENT:
     - b1
     - b2
   h2:
-    - b3
-    - b4
+    - b1
+    - b2
   vbf:
     - q1
     - q2
@@ -45,7 +45,7 @@ PERMUTATIONS:
   h1:
     - [b1, b2]
   h2:
-    - [b3, b4]
+    - [b1, b2]
   vbf:
     - [q1, q2]
 
